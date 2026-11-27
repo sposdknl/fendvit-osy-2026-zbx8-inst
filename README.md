@@ -1,60 +1,96 @@
-# Samostatná práce: Instalace Zabbixu 8.0 LTS
+# Zabbix 8.0 LTS server na Debianu 13
 
-![Titulní ilustrace s logy Zabbix, Vagrant a Debian nad virtuálním serverem](Images/zabbix-8-cover.png)
+![Medvěd s pivem u serveru](Images/vagrant-bear.jpg)
 
-## Cíl
+Cílem bylo udělat instalaci Zabbix serveru 8.0 LTS, která se celá spustí příkazem `vagrant up`. Ve virtuálce s Debianem 13 běží MariaDB, Zabbix server, webové rozhraní přes Apache a Zabbix Agent 2, který hlídá ten samý server. Nic se ve virtuálce nemusí instalovat ručně.
 
-Připravte reprodukovatelnou instalaci **Zabbix serveru 8.0 LTS** ve virtuálním stroji **Debian 13**. Virtuální stroj vytvořte pomocí **Vagrantu** a instalaci proveďte **shell skriptem** spuštěným jako Vagrant provisioning. Pro databázi použijte **MariaDB**. Na stejný stroj nainstalujte také Zabbix Agent 2 a zpřístupněte webové rozhraní.
+## Co je v repozitáři
 
-Svůj studentský repozitář si vytvořte přes [odkaz k zadání v GitHub Classroom](https://osy.sposdk.cz/zadani/osy-2026-zbx8-inst). Výsledkem má být projekt, který lze spustit z čistého klonu příkazem `vagrant up`, bez ruční instalace balíčků uvnitř virtuálního stroje.
+- `Vagrantfile` - box `bento/debian-13`, 2 CPU a 2 GB RAM, hostname `zbx8-fendvit`. Port 80 z virtuálky je přesměrovaný na `127.0.0.1:8080` a SSH na `127.0.0.1:2206`, takže web ani SSH nejsou vidět z jiných počítačů v síti.
+- `scripts/install-zabbix-server.sh` - přidá oficiální repozitář Zabbix 8.0 pro Debian 13, nainstaluje MariaDB, Zabbix server, web, Apache a agenta 2, vytvoří databázi, importuje schéma, nastaví konfiguraci a spustí služby.
+- `scripts/configure-zabbix-hosts.sh` - přes Zabbix API přidá místní Debian jako hosta, naimportuje hosta `sposdk.cz` a změní výchozí heslo účtu Admin.
+- `Zabbix/export/sposdk.cz_hosts.yaml` - export hosta `sposdk.cz` ze zadání.
+- `Images/` - snímky obrazovky.
 
-## 1. Virtuální stroj a automatizace
+## Předpoklady
 
-- Vytvořte `Vagrantfile` pro Debian 13 (například box `bento/debian-13`) a VirtualBox. Nastavte alespoň 2 CPU a 2 GB RAM; při nedostatku paměti na hostiteli můžete po zdůvodnění v dokumentaci parametry upravit.
-- Nastavte hostname a přesměrování HTTP portu na `127.0.0.1` hostitelského počítače. SSH zpřístupněte přes `vagrant ssh`; případné vlastní přesměrování SSH omezte také na `127.0.0.1`.
-- Připojte jeden nebo více shell skriptů pomocí `config.vm.provision "shell"`. Skripty musí být součástí repozitáře a musí instalaci dokončit bez ručního spouštění příkazů ve VM.
-- Skript musí při chybě skončit nenulovým návratovým kódem. Opakované spuštění `vagrant provision` nesmí zničit existující databázi ani vyžadovat ruční opravu. Opakovatelnost scriptu není primárně nutná je jen výhodou. Nebude známkováno.
+Vagrant a VirtualBox (já mám Vagrant 2.4.9 a VirtualBox 7.2.4 na Windows 11), připojení k internetu a aspoň 2 GB volné RAM. Port 8080 na počítači nesmí být obsazený.
 
-## 2. Instalace Zabbixu
+## Spuštění
 
-Ve skriptu proveďte tyto kroky:
+```console
+git clone https://github.com/sposdknl/fendvit-osy-2026-zbx8-inst.git
+cd fendvit-osy-2026-zbx8-inst
+vagrant up
+```
 
-1. Přidejte **oficiální repozitář Zabbix 8.0 pro Debian 13** a nainstalujte balíčky pro Zabbix server s databází MySQL/MariaDB, webové rozhraní, Apache, SQL schéma a Zabbix Agent 2. Nepoužívejte balíčky Zabbixu z výchozího repozitáře Debianu.
-2. Nainstalujte MariaDB, vytvořte databázi `zabbix` s kódováním `utf8mb4` a uživatele s přístupem pouze k této databázi. Počáteční schéma a data importujte právě jednou.
-3. Nastavte připojení Zabbix serveru a webového rozhraní k databázi. Hesla nesmějí být zveřejněna v README, snímcích obrazovky ani v historii Git. Popište, jak se při spuštění předávají nebo vytvářejí.
-4. Spusťte a povolte služby MariaDB, Zabbix server, Zabbix Agent 2 a Apache. Agenta nastavte tak, aby monitoroval místní server.
-5. Dokončete prvotní nastavení webového rozhraní. V jeho záhlaví nastavte vlastní rozpoznatelný název serveru, například své jméno nebo školní identifikátor. Instalujte do systému `zabbix.conf.php` a nakonfigurujte ho tak aby nebylo nutné ručně procházet PHP wizard.
+První `vagrant up` trvá několik minut, protože se stahují balíčky. Do virtuálky se dostanu přes `vagrant ssh`. Když chci skripty pustit znovu, stačí `vagrant provision`. Databáze se tím nesmaže, schéma se importuje jen tehdy, když v databázi ještě není tabulka `dbversion`. Hosti se taky vytvoří jen jednou. Vypnutí je `vagrant halt`, smazání virtuálky `vagrant destroy`.
 
-Při postupu vycházejte z [oficiální instalace Zabbixu](https://www.zabbix.com/download), [poznámek k balíčkům](https://www.zabbix.com/documentation/8.0/en/manual/installation/install/packages) a [požadavků Zabbixu 8.0](https://www.zabbix.com/documentation/8.0/en/manual/installation/requirements). Adresu a název instalačního balíčku repozitáře ověřte při práci podle aktuálního oficiálního návodu.
+## Web
 
-## 3. Ověření monitorování
+Web je na adrese **http://127.0.0.1:8080/zabbix/** (adresa http://127.0.0.1:8080/ na něj přesměruje). Přihlašuje se jako `Admin`. PHP wizard se neprochází, protože skript rovnou vytvoří `/etc/zabbix/web/zabbix.conf.php`. V záhlaví webu je název serveru `Vit Fendrych - OSY 2026`.
 
-- Otevřete webové rozhraní z hostitelského počítače. Uveďte přesnou adresu a port ve svém README.
-- Přidejte místní Debian 13 jako hosta a přiřaďte vhodnou šablonu pro Zabbix Agent 2. V **Latest data** ukažte aktuální hodnoty z agenta.
-- Importujte hosta `sposdk.cz` z některého souboru v adresáři [`Zabbix/export`](Zabbix/export/) a ověřte v **Latest data** hodnoty pro TLS/SSL certifikát `https://sposdk.cz`. Pokud import staršího exportu vyžaduje úpravu pro Zabbix 8.0, změnu popište a upravený export odevzdejte.
-- Ověřte běh služeb příkazem `systemctl status` nebo `systemctl is-active`.
+## Hesla
 
-## 4. Odevzdání
+V repozitáři ani v README žádné heslo není. Skript si heslo k databázi vygeneruje až ve virtuálce přes `openssl rand` a uloží ho do `/root/zabbix-secrets/db-password`, kam má přístup jen root. Odtud ho dává do `zabbix_server.conf` (práva 640, root:zabbix) a do `zabbix.conf.php` (práva 400, www-data). Při dalším `vagrant provision` se použije stejné heslo, takže se nic nerozbije.
 
-Ve svém GitHub Classroom repozitáři odevzdejte:
+Výchozí heslo `zabbix` k účtu Admin druhý skript hned změní na náhodné a uloží ho do `/root/zabbix-secrets/admin-password`. Zobrazím ho takhle:
 
-- `Vagrantfile`, všechny provisioning skripty a případné konfigurační šablony;
-- vlastní `README.md` s předpoklady, příkazy pro spuštění (`vagrant up`, `vagrant ssh`, `vagrant provision`), adresou webu, postupem ověření a popisem řešení potíží, na které jste narazili;
-- snímky obrazovky v adresáři `Images/`: web s vaším názvem serveru, dostupný místní host a jeho aktuální data, monitoring certifikátu `sposdk.cz` a ověření běhu služeb;
-- odkaz na repozitář v Teams.
-- soubory zadání odstraňte a ponechte jen Vaši práci.
+```console
+vagrant ssh -c "sudo cat /root/zabbix-secrets/admin-password"
+```
 
-Do repozitáře neukládejte `.vagrant/`, virtuální disk, hesla ani soubory s tajnými údaji. Před odevzdáním ověřte projekt z čistého klonu nebo po `vagrant destroy` a novém `vagrant up`.
+## Hosti v Zabbixu
 
-## Hodnocení (30 bodů)
+V čerstvé databázi už je host `Zabbix server` s adresou `127.0.0.1:10050` a šablonami `Linux by Zabbix agent` a `Zabbix server health`. Je to přesně ten Debian, na kterém všechno běží, takže ho skript přes API jen přejmenuje na `zbx8-fendvit` (viditelné jméno `Debian 13 (zbx8-fendvit)`) a přidá mu štítek `OS: Debian 13`. Šablona `Linux by Zabbix agent` funguje i s agentem 2. V konfiguraci agenta je `Server=127.0.0.1`, `ServerActive=127.0.0.1` a `Hostname=zbx8-fendvit`, aby seděl s názvem hosta.
 
-| Kritérium | Body |
-| --- | ---: |
-| Funkční Vagrantfile s Debianem 13 a dostupným webem | 5 |
-| Automatická instalace Zabbixu 8.0 LTS, MariaDB a webového rozhraní | 10 |
-| Instalace agenta, místní host a aktuální data | 4 |
-| Monitoring TLS/SSL certifikátu `sposdk.cz` | 4 |
-| Opakovatelný provisioning a bezpečné zacházení s hesly | 3 |
-| Dokumentace a požadované snímky obrazovky | 4 |
+Host `sposdk.cz` se importuje ze souboru `Zabbix/export/sposdk.cz_hosts.yaml` přes `configuration.import`. Export je ze Zabbixu 7.0, ale Zabbix 8.0 ho při importu sám převedl, takže jsem ho nemusel upravovat. Host má šablonu `Website certificate by Zabbix agent 2` a rozhraní `127.0.0.1:10050`, takže certifikát `https://sposdk.cz` stahuje můj místní agent 2.
 
-Soubory v adresáři [`Example`](Example/) zachycují starší řešení pro Zabbix 7.0. Nejsou hotovým řešením této práce; zejména jejich repozitář, parametry VM a práce s heslem nesplňují nové požadavky.
+## Ověření
+
+Po `vagrant up` jsem otevřel web, přihlásil se a zkontroloval služby ve virtuálce:
+
+```console
+vagrant ssh
+systemctl is-active mariadb zabbix-server zabbix-agent2 apache2
+systemctl is-enabled mariadb zabbix-server zabbix-agent2 apache2
+sudo zabbix_server -V
+sudo zabbix_agent2 -V
+sudo zabbix_agent2 -t "web.certificate.get[sposdk.cz,443]"
+```
+
+Všechny čtyři služby jsou `active` a `enabled`, server i agent mají verzi 8.0.0:
+
+![Ověření služeb](Images/06-sluzby.png)
+
+Web s mým názvem serveru v levém horním rohu. Na dashboardu je vidět, že server běží, verze 8.0.0 a dva dostupní hosti:
+
+![Dashboard](Images/02-dashboard.png)
+
+Oba hosti mají zelenou ikonu ZBX, takže se s agentem dá spojit:
+
+![Hosti](Images/03-hosti.png)
+
+Aktuální data z agenta na místním Debianu (Monitoring → Latest data):
+
+![Latest data Debian](Images/04-latest-data-debian.png)
+
+Certifikát `sposdk.cz`: výsledek `valid`, vydavatel Actalis, platnost do 5. 5. 2027:
+
+![Latest data sposdk.cz](Images/05-latest-data-sposdk.png)
+
+Projekt jsem nakonec ověřil úplně od začátku: `vagrant destroy -f`, `vagrant up` a hned potom ještě `vagrant provision`. Při druhém běhu skript vypsal, že schéma už existuje, hosti už existují a heslo už bylo změněné, a nic nespadlo.
+
+## Problémy
+
+- Napoprvé skript spadl na kontrole, jestli je Zabbix z repozitáře zabbix.com: `apt-cache policy zabbix-server-mysql | grep -q repo.zabbix.com`. `grep -q` skončí hned po prvním nálezu a zavře rouru, `apt-cache` pak dostane SIGPIPE a se `set -o pipefail` je to chyba, i když se všechno nainstalovalo správně. Kontrolu jsem přepsal na `dpkg-query -W -f='${Version}'` a porovnávám, jestli verze obsahuje `:8.0.` (balíček z Debianu je 7.0).
+- Ve výchozím repozitáři Debianu 13 je Zabbix 7.0, proto se musí nejdřív přidat repozitář zabbix.com. Adresa pro 8.0 má v cestě `/release/`, bez toho vrací 404.
+- Nejdřív jsem vedle výchozího hosta `Zabbix server` vytvořil nového hosta a ten výchozí vypnul, aby se agent neptal dvakrát. Jenže widgety na dashboardu (paměť, grafy) jsou navázané právě na výchozího hosta, takže ukazovaly „No data“. Proto ho teď skript přejmenuje místo vypínání.
+- Kvůli Windows mám v repozitáři `.gitattributes`, aby se skripty uložily s konci řádků LF. S CRLF by je bash ve virtuálce nespustil.
+
+## Odkazy
+
+- [Stažení Zabbixu (Debian 13, MySQL, Apache)](https://www.zabbix.com/download)
+- [Instalace z balíčků](https://www.zabbix.com/documentation/8.0/en/manual/installation/install/packages)
+- [Požadavky Zabbixu 8.0](https://www.zabbix.com/documentation/8.0/en/manual/installation/requirements)
+- [Zabbix API](https://www.zabbix.com/documentation/8.0/en/manual/api)
